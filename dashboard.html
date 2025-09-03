@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin Dashboard — Orders & Messages</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .navbar { background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+    .nav-link { cursor: pointer; }
+    .card { border-radius:12px; box-shadow: 0 6px 18px rgba(13,110,253,0.03); transition: transform .12s ease; }
+    .card:hover { transform: translateY(-4px); }
+    .fadeUp { animation: fadeUp .45s ease both; }
+    @keyframes fadeUp { from { opacity:0; transform: translateY(12px);} to{opacity:1; transform:none;} }
+    .small-note { font-size: .85rem; color:#6c757d; }
+    table td, table th { vertical-align: middle; }
+    @media (max-width:768px){ .table { font-size: .9rem } }
+    .alert-float { position: fixed; right:20px; top:80px; z-index:1050; min-width:220px; }
+  </style>
+</head>
+<body>
+  <!-- Responsive Navbar -->
+  <nav class="navbar navbar-expand-lg">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#">Admin Dashboard</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="mainNavbar">
+        <ul class="navbar-nav ms-auto align-items-center">
+          <li class="nav-item"><a class="nav-link"  id="nav-orders" role="button">Orders</a></li>
+          <li class="nav-item"><a class="nav-link" id="nav-messages" role="button">Messages</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4 mt-5">
+    <ul class="nav nav-tabs mb-3" id="dashboardTabs" role="tablist" style="display:none">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="orders-tab" data-bs-toggle="tab" data-bs-target="#orders-pane" type="button" role="tab">Orders</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages-pane" type="button" role="tab">Messages</button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Orders Pane -->
+      <div class="tab-pane fade show active" id="orders-pane" role="tabpanel">
+        <div class="card p-3 fadeUp">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Orders</h5>
+            <button id="deleteSelectedBtn" class="btn btn-sm btn-danger">Delete Selected</button>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-hover align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th><input type="checkbox" id="selectAll"></th>
+                  <th>Buyer</th><th>Phone</th><th>Location</th><th>Items</th><th>Total</th><th>Date</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messages Pane -->
+      <div class="tab-pane fade" id="messages-pane" role="tabpanel">
+        <div class="card p-3 fadeUp">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Messages</h5>
+            <small class="small-note">Delete messages you don't need</small>
+          </div>
+
+          <div class="table-responsive" style="max-height:520px; overflow:auto;">
+            <table class="table table-hover">
+              <thead class="table-light">
+                <tr><th>Name</th><th>Email</th><th>Message</th><th>Action</th></tr>
+              </thead>
+              <tbody id="messagesTable"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Edit Order Modal -->
+  <div class="modal fade" id="editOrderModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="editOrderForm">
+          <div class="modal-header">
+            <h5 class="modal-title">Edit Buyer Info</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="editOrderId">
+            <div class="mb-3">
+              <label class="form-label">Name</label>
+              <input id="editName" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Phone</label>
+              <input id="editPhone" class="form-control" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Location</label>
+              <input id="editLocation" class="form-control" required>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="alertHolder" class="alert-float"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDN7FQk1j_uS07XWX1p-G0wWAnB5g3krJ8",
+      authDomain: "fir-f3352.firebaseapp.com",
+      databaseURL: "https://fir-f3352-default-rtdb.firebaseio.com/",
+      projectId: "fir-f3352",
+      storageBucket: "fir-f3352.appspot.com",
+      messagingSenderId: "751167532545",
+      appId: "1:751167532545:web:a40c7310ff525c35411a00"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    function showTempAlert(msg, type = 'success', ms = 2200) {
+      const holder = document.getElementById('alertHolder');
+      const el = document.createElement('div');
+      el.className = `alert alert-${type} shadow-sm`;
+      el.style.marginBottom = '10px';
+      el.textContent = msg;
+      holder.appendChild(el);
+      setTimeout(() => el.remove(), ms);
+    }
+
+    function formatDate(ts) {
+      if (!ts) return '';
+      try { return new Date(ts).toLocaleString(); } catch { return ''; }
+    }
+
+    function loadOrders() {
+      const tbody = document.getElementById('ordersTable');
+      db.ref('orders').on('value', snapshot => {
+        tbody.innerHTML = '';
+        const data = snapshot.val() || {};
+        Object.entries(data).reverse().forEach(([id, order]) => {
+          const buyer = order.buyer || {};
+          const items = (order.items || []).map(i => `${i.name} (x${i.qty})`).join('<br>');
+          const tr = document.createElement('tr');
+
+          tr.innerHTML = `
+            <td><input type="checkbox" class="order-checkbox" data-id="${id}"></td>
+            <td>${escapeText(buyer.name||'')}</td>
+            <td>${escapeText(buyer.phone||'')}</td>
+            <td>${escapeText(buyer.location||'')}</td>
+            <td style="min-width:200px">${items}</td>
+            <td>$${(order.total||0).toFixed ? (order.total||0).toFixed(2) : order.total}</td>
+            <td>${formatDate(order.date)}</td>
+            <td></td>
+          `;
+
+          const actionsTd = tr.querySelector('td:last-child');
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn btn-sm btn-outline-primary me-2';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', () => openEditModal(id, order));
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'btn btn-sm btn-danger';
+          delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => {
+            if (confirm('Delete this order?')) {
+              db.ref('orders/' + id).remove()
+                .then(() => showTempAlert('Order deleted', 'success'))
+                .catch(err => { console.error(err); showTempAlert('Delete failed', 'danger'); });
+            }
+          });
+
+          actionsTd.appendChild(editBtn);
+          actionsTd.appendChild(delBtn);
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    const editModalEl = document.getElementById('editOrderModal');
+    const bootstrapEditModal = new bootstrap.Modal(editModalEl);
+    function openEditModal(id, order) {
+      const buyer = order.buyer || {};
+      document.getElementById('editOrderId').value = id;
+      document.getElementById('editName').value = buyer.name || '';
+      document.getElementById('editPhone').value = buyer.phone || '';
+      document.getElementById('editLocation').value = buyer.location || '';
+      bootstrapEditModal.show();
+    }
+
+    document.getElementById('editOrderForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const id = document.getElementById('editOrderId').value;
+      const name = document.getElementById('editName').value.trim();
+      const phone = document.getElementById('editPhone').value.trim();
+      const location = document.getElementById('editLocation').value.trim();
+
+      if (!id) { showTempAlert('Missing order id', 'danger'); return; }
+
+      db.ref('orders/' + id + '/buyer').update({ name, phone, location })
+        .then(() => {
+          bootstrapEditModal.hide();
+          showTempAlert('Order updated', 'success');
+        })
+        .catch(err => {
+          console.error('Update error', err);
+          showTempAlert('Update failed', 'danger');
+        });
+    });
+
+    function loadMessages() {
+      const tbody = document.getElementById('messagesTable');
+      db.ref('contacts').on('value', snapshot => {
+        tbody.innerHTML = '';
+        const data = snapshot.val() || {};
+        Object.entries(data).reverse().forEach(([id, msg]) => {
+          const tr = document.createElement('tr');
+          const tdAction = document.createElement('td');
+
+          tr.innerHTML = `
+            <td>${escapeText(msg.name||'')}</td>
+            <td>${escapeText(msg.email||'')}</td>
+            <td style="max-width:240px;white-space:normal">${escapeText(msg.message||'')}</td>
+          `;
+
+          const del = document.createElement('button');
+          del.className = 'btn btn-sm btn-danger';
+          del.textContent = 'Delete';
+          del.addEventListener('click', () => {
+            if (confirm('Delete this message?')) {
+              db.ref('contacts/' + id).remove()
+                .then(() => showTempAlert('Message deleted', 'success'))
+                .catch(err => { console.error(err); showTempAlert('Delete failed', 'danger'); });
+            }
+          });
+
+          tdAction.appendChild(del);
+          tr.appendChild(tdAction);
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    document.getElementById('nav-orders').addEventListener('click', () => {
+      const ordersTab = document.getElementById('orders-tab');
+      bootstrap.Tab && new bootstrap.Tab(ordersTab).show();
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+    document.getElementById('nav-messages').addEventListener('click', () => {
+      const messagesTab = document.getElementById('messages-tab');
+      bootstrap.Tab && new bootstrap.Tab(messagesTab).show();
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+
+    function escapeText(s) {
+      return String(s || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    }
+
+    // Bulk delete
+    document.getElementById('deleteSelectedBtn').addEventListener('click', () => {
+      const checked = document.querySelectorAll('.order-checkbox:checked');
+      if (checked.length === 0) { showTempAlert('No orders selected', 'warning'); return; }
+      if (!confirm(`Delete ${checked.length} selected orders?`)) return;
+
+      checked.forEach(cb => {
+        const id = cb.getAttribute('data-id');
+        db.ref('orders/' + id).remove()
+          .catch(err => console.error(err));
+      });
+      showTempAlert('Selected orders deleted', 'success');
+    });
+
+    // Select all
+    document.getElementById('selectAll').addEventListener('change', function() {
+      const boxes = document.querySelectorAll('.order-checkbox');
+      boxes.forEach(cb => cb.checked = this.checked);
+    });
+
+    loadOrders();
+    loadMessages();
+  </script>
+</body>
+</html>

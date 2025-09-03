@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mini Shop - Firebase + JS (with Search)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root{--accent:#0d6efd}
+    body{background:#f8f9fa;scroll-behavior:smooth}
+    .product-img{width:100%;height:200px;object-fit:cover;border-radius:6px}
+    .card{transition:transform .18s ease,box-shadow .18s ease;opacity:0;transform:translateY(20px)}
+    .card.show{opacity:1;transform:none;transition:.6s ease}
+    .card:hover{transform:translateY(-6px)!important;box-shadow:0 12px 24px rgba(0,0,0,.08)}
+    .nav-link.active{font-weight:600}
+    .badge-price{background:rgba(0,0,0,.06);color:var(--accent);font-weight:600}
+
+    /* HERO */
+    .hero {
+      position: relative;
+      height: 75vh;
+      background: url('https://picsum.photos/1600/900?shop') no-repeat center/cover;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+    }
+    .hero h1 {font-size:3rem;margin-bottom:20px;}
+    .hero form {max-width:500px;margin:auto;}
+    .hero .input-group input {border-radius:30px 0 0 30px;padding:12px;}
+    .hero .input-group button {border-radius:0 30px 30px 0;}
+
+    /* NAVBAR */
+    .navbar {
+      position: fixed;top:0;left:0;width:100%;
+      background:rgba(0,0,0,0.3)!important;
+      transition:background .3s;
+      z-index:1000;
+    }
+    .navbar.scrolled {background:rgba(0,0,0,0.8)!important;}
+    .navbar .nav-link,.navbar-brand {color:#fff!important;}
+
+    /* MAIN */
+    main.container {padding:100px 15px 60px;}
+
+    /* FOOTER */
+    footer {
+      background:#222;color:#ccc;text-align:center;padding:40px 20px;
+    }
+    footer .socials a {color:#ccc;margin:0 10px;font-size:20px;transition:color .3s;}
+    footer .socials a:hover {color:#ffd700;}
+  </style>
+</head>
+<body>
+  <!-- HERO -->
+  <header class="hero">
+    <nav class="navbar navbar-expand-lg">
+      <div class="container">
+        <a class="navbar-brand" href="#/">MiniShop</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navMenu">
+          <ul class="navbar-nav ms-auto">
+            <li class="nav-item"><a class="nav-link" href="#/">Home</a></li>
+            <li class="nav-item"><a class="nav-link" href="#/cart">Cart <span id="cartCount" class="badge bg-danger ms-1">0</span></a></li>
+            <li class="nav-item"><a class="nav-link" href="#/contact">Contact Us</a></li>
+            <li class="nav-item"><a class="nav-link" href="#/about">About</a></li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+    <div>
+      <h1>Welcome to MiniShop</h1>
+      <form id="heroSearchForm">
+        <div class="input-group">
+          <input id="heroSearchInput" type="text" class="form-control" placeholder="Search products by name or description">
+          <button class="btn btn-warning" type="submit">Search</button>
+        </div>
+      </form>
+    </div>
+  </header>
+  <!-- MAIN CONTAINER -->
+  <main class="container" id="app"></main>
+
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <script>
+  // ----------------- PRODUCTS (products.json embedded) -----------------
+  const PRODUCTS = [
+    {id:1,name:'Retro Leather Bag',price:49.99,image:'https://picsum.photos/id/1005/600/400',desc:'Handmade leather bag, medium size.'},
+    {id:2,name:'Classic Wristwatch',price:89.00,image:'https://picsum.photos/id/103/600/400',desc:'Water resistant analog wristwatch.'},
+    {id:3,name:'Wireless Earbuds',price:29.99,image:'https://picsum.photos/id/1060/600/400',desc:'Comfort fit earbuds with charging case.'},
+    {id:4,name:'Scented Candle',price:12.5,image:'https://picsum.photos/id/1080/600/400',desc:'Soy wax candle, 40h burn time.'},
+    {id:5,name:'Minimal Lamp',price:39.95,image:'https://picsum.photos/id/1011/600/400',desc:'LED desk lamp with dimmer.'},
+    {id:6,name:'Canvas Sneakers',price:59.99,image:'https://picsum.photos/id/1027/600/400',desc:'Classic comfortable canvas sneakers.'},
+    {id:7,name:'Travel Mug',price:15.75,image:'https://picsum.photos/id/1018/600/400',desc:'Insulated stainless travel mug.'},
+    {id:8,name:'Notebook Set',price:9.99,image:'https://picsum.photos/id/1041/600/400',desc:'Set of 3 A5 notebooks.'},
+    {id:9,name:'Bluetooth Speaker',price:45.00,image:'https://picsum.photos/id/1050/600/400',desc:'Portable speaker with bass.'},
+    {id:10,name:'Sunglasses',price:24.5,image:'https://picsum.photos/id/1074/600/400',desc:'Polarized UV400 sunglasses.'},
+    {id:11,name:'Beanie Hat',price:11.0,image:'https://picsum.photos/id/1012/600/400',desc:'Warm knitted beanie.'},
+    {id:12,name:'Phone Stand',price:7.25,image:'https://picsum.photos/id/1084/600/400',desc:'Aluminium phone/tablet stand.'}
+  ];
+
+  // ----------------- FIREBASE CONFIG -----------------
+  const firebaseConfig = {
+      apiKey: "AIzaSyDN7FQk1j_uS07XWX1p-G0wWAnB5g3krJ8",
+      authDomain: "fir-f3352.firebaseapp.com",
+      databaseURL: "https://fir-f3352-default-rtdb.firebaseio.com/",
+      projectId: "fir-f3352",
+      storageBucket: "fir-f3352.appspot.com",
+      messagingSenderId: "751167532545",
+      appId: "1:751167532545:web:a40c7310ff525c35411a00"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  // ----------------- SIMPLE ROUTER -----------------
+  const app = document.getElementById('app');
+  const pageSize = 6;
+
+  function setActiveNav(path){
+    document.querySelectorAll('.nav-link').forEach(a=>{
+      a.classList.toggle('active', a.getAttribute('href')===path);
+    });
+  }
+
+  function render(){
+    const hash = location.hash || '#/';
+    if(hash.startsWith('#/product')){
+      const params = new URLSearchParams(hash.split('?')[1]);
+      const id = Number(params.get('id')) || 0;
+      renderProduct(id);
+      setActiveNav('#/');
+    } else if(hash.startsWith('#/cart')){
+      renderCart(); setActiveNav('#/cart');
+    } else if(hash.startsWith('#/contact')){
+      renderContact(); setActiveNav('#/contact');
+    } else if(hash.startsWith('#/about')){
+      renderAbout(); setActiveNav('#/about');
+    } else {
+      const params = new URLSearchParams(hash.split('?')[1]);
+      const page = Number(params.get('page'))||1;
+      const search = params.get('search') || '';
+      renderHome(page, search);
+      setActiveNav('#/');
+    }
+    updateCartCount();
+  }
+
+  // ----------------- CART STORAGE -----------------
+  function getCart(){
+    return JSON.parse(localStorage.getItem('mini_cart')||'[]');
+  }
+  function saveCart(c){ localStorage.setItem('mini_cart', JSON.stringify(c)); updateCartCount(); }
+  function addToCart(id){
+    const cart = getCart();
+    const item = cart.find(i=>i.id===id);
+    if(item) item.qty++;
+    else cart.push({id,qty:1});
+    saveCart(cart);
+    toast('Added to cart');
+  }
+  function removeFromCart(id){
+    let cart = getCart(); cart = cart.filter(i=>i.id!==id); saveCart(cart);
+  }
+  function clearCart(){ localStorage.removeItem('mini_cart'); updateCartCount(); }
+  function updateCartCount(){ const c = getCart().reduce((s,i)=>s+i.qty,0); document.getElementById('cartCount').textContent = c; }
+
+  // ----------------- UI BUILDERS -----------------
+  function renderHome(page=1, search=''){
+   const q = (search||'').trim().toLowerCase();
+   const filtered = q ? PRODUCTS.filter(p => (p.name + ' ' + p.desc).toLowerCase().includes(q)) : PRODUCTS.slice();
+   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+   page = Math.min(Math.max(1, page), totalPages);
+   const start = (page-1)*pageSize;
+   const items = filtered.slice(start,start+pageSize);
+
+app.innerHTML = `
+  <div class="row mb-3 align-items-center">
+    <div class="col"><h2 style="margin:0;">Products</h2></div>
+
+    <div class="col-md-5">
+      <form id="searchForm">
+        <div class="input-group">
+          <input id="searchInput" class="form-control" placeholder="Search products by name or description" value="${search ? String(search).replace(/"/g,'&quot;') : ''}">
+          <button class="btn btn-outline-secondary" type="submit">Search</button>
+          <button id="clearSearch" class="btn btn-outline-secondary" type="button">Clear</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="col-auto text-muted" style="font-size:14px;">Page ${page} of ${totalPages}</div>
+  </div>
+
+  <div class="row" id="productsRow"></div>
+
+  <nav aria-label="pagination" class="mt-4">
+    <ul class="pagination justify-content-center" id="pager" style="margin:0;"></ul>
+  </nav>
+`;
+
+const row = document.getElementById('productsRow');
+
+if(items.length === 0){
+  row.innerHTML = `<div class="col-12"><div class="alert alert-warning">No products found${q? ' for "'+(search)+'"':''}</div></div>`;
+} else {
+  row.innerHTML = '';
+  items.forEach(p=>{
+    const col = document.createElement('div'); 
+    col.className = 'col-md-4 mb-4 fade-in';
+
+    col.innerHTML = `
+      <div class="card h-100 shadow-sm" style="border-radius:10px; overflow:hidden;">
+        
+        <img src="${p.image}" alt="${p.name}" 
+             class="product-img card-img-top" 
+             style="height:220px; object-fit:cover;">
+        
+        <div class="card-body d-flex flex-column" style="padding:16px;">
+          <h5 class="card-title" style="margin-bottom:8px; font-size:18px;">${p.name}</h5>
+          <p class="card-text text-muted small" style="margin-bottom:12px;">${p.desc}</p>
+          
+          <div class="mt-auto d-flex justify-content-between align-items-center">
+            <span class="badge badge-price p-2" 
+                  style="background:#0d6efd; color:white; font-size:14px; border-radius:6px;">
+                  $${p.price.toFixed(2)}
+            </span>
+            
+            <div>
+              <button class="btn btn-sm btn-outline-primary me-2" 
+                      style="padding:4px 10px;" 
+                      onclick="location.hash='#/product?id=${p.id}'">View</button>
+              <button class="btn btn-sm btn-primary" 
+                      style="padding:4px 10px;" 
+                      onclick="addToCart(${p.id})">Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    row.appendChild(col);
+  });
+}
+
+    // pager
+    const pager = document.getElementById('pager');
+    pager.innerHTML = '';
+    const prev = document.createElement('li'); prev.className='page-item' + (page===1? ' disabled':'');
+    prev.innerHTML = `<a class="page-link">&laquo;</a>`; prev.onclick = ()=>{ if(page>1) location.hash = `#/?page=${page-1}${q? '&search='+encodeURIComponent(search): ''}`; };
+    pager.appendChild(prev);
+    for(let i=1;i<=totalPages;i++){
+      const li = document.createElement('li'); li.className='page-item' + (i===page? ' active':'');
+      li.innerHTML = `<a class="page-link">${i}</a>`; li.onclick = ()=> location.hash = `#/?page=${i}${q? '&search='+encodeURIComponent(search): ''}`;
+      pager.appendChild(li);
+    }
+    const next = document.createElement('li'); next.className='page-item' + (page===totalPages? ' disabled':'');
+    next.innerHTML = `<a class="page-link">&raquo;</a>`; next.onclick = ()=>{ if(page<totalPages) location.hash = `#/?page=${page+1}${q? '&search='+encodeURIComponent(search): ''}`; };
+    pager.appendChild(next);
+
+    // attach search handlers
+    const searchForm = document.getElementById('searchForm');
+    searchForm.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const qv = document.getElementById('searchInput').value.trim();
+      location.hash = `#/?page=1&search=${encodeURIComponent(qv)}`;
+    });
+    document.getElementById('clearSearch').addEventListener('click', ()=>{ location.hash = '#/'; });
+  }
+
+  function findProduct(id){ return PRODUCTS.find(p=>p.id===id); }
+
+  function renderProduct(id){
+    const p = findProduct(id);
+    if(!p){ app.innerHTML = '<div class="alert alert-warning">Product not found</div>'; return; }
+    app.innerHTML = `
+      <div class="row">
+        <div class="col-md-6 mb-3"><img src="${p.image}" class="img-fluid rounded shadow-sm"></div>
+        <div class="col-md-6">
+          <h2>${p.name}</h2>
+          <p class="text-muted">${p.desc}</p>
+          <h4 class="text-primary">$${p.price.toFixed(2)}</h4>
+          <div class="my-3">
+            <button class="btn btn-primary me-2" id="btnAdd">Add to Cart</button>
+            <button class="btn btn-outline-secondary" onclick="location.hash='#/cart'">Go to Cart</button>
+          </div>
+
+          <hr>
+          <h5>Buy now — Fill your information</h5>
+          <form id="buyForm" class="mt-3">
+            <div class="mb-2"><input required class="form-control" placeholder="Full name" name="name"></div>
+            <div class="mb-2"><input required class="form-control" placeholder="Phone" name="phone"></div>
+            <div class="mb-2"><input required class="form-control" placeholder="Province + City" name="location"></div>
+            <div class="col-md-4"><input required id="quantitybuy" type='number' min=1 max=100 class="form-control" placeholder="Quantity"  ></div><br>
+            <button class="btn btn-success">Buy single item</button>
+          </form>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btnAdd').addEventListener('click', ()=>addToCart(p.id));
+    document.getElementById('buyForm').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const fd = Object.fromEntries(new FormData(e.target).entries());
+      const quantity = document.getElementById('quantitybuy').value;
+      const order = {items:[{id:p.id, name:p.name, price:p.price, qty:quantity}], buyer:fd, total: p.price, date: Date.now()};
+      db.ref('orders').push(order).then(()=>{
+        toast('Purchase saved to Firebase — thank you!');
+      }).catch(err=>{toast('Error saving order'); console.error(err)});
+    });
+  }
+
+  function renderCart(){
+    const cart = getCart();
+    if(cart.length===0){ app.innerHTML='<div class="alert alert-info">Cart is empty</div>'; return; }
+    const rows = cart.map(ci=>{
+      const p = findProduct(ci.id);
+      return `
+        <tr>
+          <td style="width:120px"><img src="${p.image}" style="width:110px;height:70px;object-fit:cover;border-radius:6px"></td>
+          <td>${p.name}</td>
+          <td>${ci.qty}</td>
+          <td>$${(p.price*ci.qty).toFixed(2)}</td>
+          <td><button class="btn btn-sm btn-danger" data-id="${p.id}">Remove</button></td>
+        </tr>
+      `;
+    }).join('\n');
+    const total = cart.reduce((s,i)=>{ const p=findProduct(i.id); return s + p.price * i.qty; },0);
+    app.innerHTML = `
+      <h3>Your Cart</h3>
+      <div class="table-responsive">
+        <table class="table align-middle">
+          <thead><tr><th></th><th>Product</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mt-3">
+        <div>
+          <button id="clearCart" class="btn btn-outline-secondary">Clear cart</button>
+        </div>
+        <div>
+          <strong class="me-3">Total: $${total.toFixed(2)}</strong>
+        </div>
+      </div>
+
+      <hr>
+      <h5>Buyer information</h5>
+      <form id="buyAllForm" class="mt-2">
+        <div class="row g-2">
+          <div class="col-md-4"><input required name="name" class="form-control" placeholder="Full name"></div>
+          <div class="col-md-4"><input required name="phone" class="form-control" placeholder="Phone"></div>
+          <div class="col-md-4"><input required name="location" class="form-control" placeholder="Province + City"></div>
+        </div>
+        <div class="mt-3"><button class="btn btn-primary">Place order for all</button></div>
+      </form>
+    `;
+    // attach events
+    document.querySelectorAll('button[data-id]').forEach(b=>{
+      b.addEventListener('click', ()=>{ removeFromCart(Number(b.dataset.id)); render(); });
+    });
+    document.getElementById('clearCart').addEventListener('click', ()=>{ if(confirm('Clear cart?')){ clearCart(); render(); }});
+    document.getElementById('buyAllForm').addEventListener('submit', (e)=>{
+      e.preventDefault(); const buyer = Object.fromEntries(new FormData(e.target).entries());
+      const orderItems = cart.map(ci=>{ const p=findProduct(ci.id); return {id:p.id,name:p.name,price:p.price,qty:ci.qty}; });
+      const order = {items:orderItems, buyer, total, date:Date.now()};
+      db.ref('orders').push(order).then(()=>{
+        toast('Order saved to Firebase.'); clearCart(); render();
+      }).catch(err=>{toast('Error saving order'); console.error(err)});
+    });
+  }
+
+  function renderContact(){
+    app.innerHTML = `
+      <div class="card p-4">
+        <h3>Contact Us</h3>
+        <p>send a message</p>
+        <form id="contactForm">
+          <div class="mb-2"><input name="name" class="form-control" placeholder="Your name"></div>
+          <div class="mb-2"><input name="email" class="form-control" placeholder="Email"></div>
+          <div class="mb-2"><textarea name="message" class="form-control" placeholder="Message"></textarea></div>
+          <button class="btn btn-primary">Send</button>
+        </form>
+      </div>
+    `;
+    document.getElementById('contactForm').addEventListener('submit',(e)=>{
+          e.preventDefault();
+          const form = e.target;
+          const name = form.name.value.trim();
+          const email = form.email.value.trim();
+          const message = form.message.value.trim();
+
+          if (name && email && message) {
+            db.ref('contacts').push({
+              name,
+              email,
+              message,
+              timestamp: Date.now()
+            })
+            .then(() => {
+              toast('Message sent successfully!');
+              form.reset();
+            })
+            .catch((err) => {
+              console.error("Error saving contact:", err);
+              toast('Failed to send message');
+            });
+          } else {
+            toast('Please fill all fields');
+          }
+    });
+  }
+
+  function renderAbout(){
+    app.innerHTML = `
+      <div class="card p-4">
+        <h3>About</h3>
+        <p>This is a demo single-file shop built with Bootstrap, plain JavaScript and Firebase Realtime Database. Use it as a starter template.</p>
+      </div>
+    `;
+  }
+
+  // small toast
+  function toast(msg){
+    const el = document.createElement('div');
+    el.className='toast align-items-center show';
+    el.style.position='fixed'; el.style.right='20px'; el.style.bottom='20px'; el.style.zIndex=9999; el.style.background='#fff'; el.style.padding='10px 14px'; el.style.borderRadius='8px'; el.style.boxShadow='0 6px 20px rgba(0,0,0,.08)';
+    el.innerHTML = `<div class='d-flex align-items-center'><div class='me-2'>✅</div><div>${msg}</div></div>`;
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(),2500);
+  }
+
+  // initial
+  window.addEventListener('hashchange', render);
+  window.addEventListener('load', ()=>{ if(!location.hash) location.hash='#/'; render(); });
+
+  // expose some functions to inline onclick handlers
+  window.addToCart = addToCart;
+  </script>
+    <footer id="footer">
+    <p>Mini-Shop is your one-stop store for tech & lifestyle products.</p>
+    <div class="socials">
+      <a href="#"><i class="fab fa-facebook-f"></i></a>
+      <a href="#"><i class="fab fa-twitter"></i></a>
+      <a href="#"><i class="fab fa-instagram"></i></a>
+    </div>
+    <p>&copy; 2025 Mini-Shop. All rights reserved.</p>
+  </footer>
+ <!-- FOOTER -->
+
+
+  <!-- Firebase (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+    <script>
+  // === Keep all your original JS here (products, firebase, router, etc) ===
+  // Additions below:
+
+  // Navbar scroll effect
+  window.addEventListener("scroll",()=>{
+    document.querySelector(".navbar").classList.toggle("scrolled",window.scrollY>50);
+  });
+
+  // Hero search: redirect + scroll
+  // --- Robust hero search: change hash, wait for #app to be rendered, then scroll with navbar offset ---
+(function(){
+  function scrollToAppSmooth() {
+    const appEl = document.getElementById('app');
+    const nav = document.querySelector('.navbar');
+    const navH = nav ? nav.offsetHeight : 70;
+    if(!appEl) return;
+
+    const doScroll = () => {
+      const top = appEl.getBoundingClientRect().top + window.scrollY - navH - 12; // small gap
+      window.scrollTo({ top, behavior: 'smooth' });
+    };
+
+    // If content already present and visible, scroll immediately
+    if (appEl.children.length > 0 && appEl.offsetHeight > 0) {
+      // give a tiny delay so paint/animations can start
+      setTimeout(doScroll, 80);
+      return;
+    }
+
+    let done = false;
+    const mo = new MutationObserver((mutations, observer) => {
+      if (done) return;
+      if (appEl.children.length > 0 && appEl.offsetHeight > 0) {
+        done = true;
+        observer.disconnect();
+        // tiny delay to let render + any inserted animations initialize
+        setTimeout(doScroll, 80);
+      }
+    });
+
+    mo.observe(appEl, { childList: true, subtree: true });
+
+    // Fallback: if nothing happens, scroll after 1500ms anyway
+    setTimeout(() => {
+      if (!done) {
+        done = true;
+        try { mo.disconnect(); } catch(e){}
+        doScroll();
+      }
+    }, 1500);
+  }
+
+  window.addEventListener('load', () => {
+    const heroForm = document.getElementById('heroSearchForm');
+    if (!heroForm) return;
+    heroForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const qv = document.getElementById('heroSearchInput').value.trim();
+      // update hash so your router handles rendering
+      location.hash = '#/?page=1&search=' + encodeURIComponent(qv);
+
+      // start waiting for render -> then scroll
+      scrollToAppSmooth();
+    });
+  });
+})();
+
+  // Animate product cards (observer)
+  const observer = new IntersectionObserver(entries=>{
+    entries.forEach((e,i)=>{
+      if(e.isIntersecting){
+        e.target.classList.add("show");
+        observer.unobserve(e.target);
+      }
+    });
+  },{threshold:.1});
+  const observeCards = ()=>document.querySelectorAll(".card").forEach((c,i)=>{c.style.transitionDelay=(i*80)+"ms";observer.observe(c)});
+  window.addEventListener("hashchange",()=>setTimeout(observeCards,500));
+  window.addEventListener("load",()=>setTimeout(observeCards,500));
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
